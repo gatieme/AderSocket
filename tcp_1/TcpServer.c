@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in  clientAddr;
     socklen_t           length = sizeof(clientAddr);
     int                 connFd;
-    int                 childPid;
+
     while( 1 )
     {
         /* accept返回一个新的套接字与客户端进行通信  */
@@ -359,28 +359,19 @@ int main(int argc, char *argv[])
         }
         else
         {
+            printf("获取到从客户端%s的连接...\n", inet_ntoa(clientAddr.sin_addr));
             ////////////////////////////////////////////////////////////////////////
             //
             //  这里填写服务器的处理代码
             //
             ////////////////////////////////////////////////////////////////////////
-        }
-        if((childPid = fork( )) == 0)       //  FORK在子进程中返回0, 在父进程中返回子进程的ID
-        {
-            close(socketFd);
-            printf("accept connect from client %s\n",inet_ntoa(clientAddr.sin_addr));
-            printf("获取到从客户端%s的连接...\n", inet_ntoa(clientAddr.sin_addr));
-
             RaiseClientRequest(connFd, clientAddr);
-            exit(0);
-        }
-        else if(childPid < 0)               //  FROK出错返回-1
-        {
-            printf("fork error: %s\n", strerror(errno));
+            //   关闭客户端的套接字描述符
+            close(connFd);
         }
     }
+                //        sleep(10);
 
-    close(connFd);
 }
 
 
