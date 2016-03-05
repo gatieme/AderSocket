@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
             printf("获取到从客户端%s的连接...\n\n\n", inet_ntoa(clientAddr.sin_addr));
 
             pthread_t   childThread;
-            arg_type    args = { connFd, clientAddr };
+            arg_type    raise_args = { connFd, clientAddr };
 
             /*
              *  第一个参数为指向线程标识符的指针。
@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
              *  第三个参数是线程运行函数的起始地址。
              *  最后一个参数是运行函数的参数。
             */
-            if(pthread_create(&childThread, NULL, RaiseThreadFunc, &args) != 0)
+            if(pthread_create(&childThread, NULL, RaiseThreadFunc, &raise_args) != 0)
             {
                 perror("pthread_create error...\n");
                 break;
@@ -244,7 +244,8 @@ void AcceptThreadFunc(void *args)
         }
         else
         {
-            printf("Pthread id = %u\n", (unsigned int)pthread_self());
+            printf("Pthread id = %u, connfd = %d\n",
+                    (unsigned long)pthread_self(), connFd);
             ////////////////////////////////////////////////////////////////////////
             //
             //  这里填写服务器的处理代码
@@ -254,7 +255,7 @@ void AcceptThreadFunc(void *args)
             printf("获取到从客户端%s的连接...\n\n\n", inet_ntoa(clientAddr.sin_addr));
 
             pthread_t   childThread;
-            arg_type    args = {connFd, clientAddr};
+            arg_type    raise_args = {connFd, clientAddr};
 
             /*
              *  第一个参数为指向线程标识符的指针。
@@ -262,7 +263,7 @@ void AcceptThreadFunc(void *args)
              *  第三个参数是线程运行函数的起始地址。
              *  最后一个参数是运行函数的参数。
             */
-            if(pthread_create(&childThread, NULL, RaiseClientRequest, &args) != 0)
+            if(pthread_create(&childThread, NULL, RaiseThreadFunc, &raise_args) != 0)
             {
                 perror("pthread_create error...\n");
                 break;
@@ -275,7 +276,6 @@ void AcceptThreadFunc(void *args)
     }
 
 }
-
 
 
 
@@ -466,16 +466,21 @@ void RaiseThreadFunc(void *args)
     int                 connFd      = arg->connFd;
     struct sockaddr_in  clientAddr  = arg->clientAddr;
 
+#ifdef DEBUG
+    printf("==DEBUG== connfd = %d, client = %s\n", connFd,  inet_ntoa(clientAddr.sin_addr));
+#endif
     RaiseClientRequest(connFd, clientAddr);
-
-
-
 }
+
+
 /// 处理客户端的请求信息
 void RaiseClientRequest(
         int connFd,     /*  客户端的连接套接字描述符, 用于发送和接收数据  */
         struct sockaddr_in  clientAddr) /*  客户端的信息, 用于显示一些客户端的信息  */
 {
+#ifdef DEBUG
+    printf("==DEBUG== connfd = %d, client = %s\n", connFd,  inet_ntoa(clientAddr.sin_addr));
+#endif
 
     printf("\n\n\n下面将依次测试  接收数据  发送数据  存储文件  推送文件\n\n\n");
 
