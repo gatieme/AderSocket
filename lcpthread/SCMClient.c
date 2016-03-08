@@ -72,6 +72,15 @@ int main(int argc, char *argv[])
         }
     }
 
+
+    condValue = 2;
+    while(1)
+    {
+        sleep(2);
+
+        pthread_cond_broadcast(&cond);  //条件满足后发信号通知所有阻塞在条件变量上的线程！
+    }
+
     return EXIT_SUCCESS;
 }
 
@@ -101,6 +110,13 @@ void* ClientThreadFunc(void *args)
         printf("socket error\n");
         exit(-1);
     }
+    printf("Wait for connect...\n");
+
+
+    pthread_cond_wait(&cond, &mut);
+    pthread_mutex_unlock(&mut);
+    //  信号会丢失，使得这里永远醒不了，所以需要重发信号.
+    //  直到在客户端的主函数中调用pthread_cond_broadcast(&cond);
 
     /*  尝试连接服务器  */
     if(connect(socketFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
@@ -121,10 +137,11 @@ void* ClientThreadFunc(void *args)
      **********************************************************/
     RaiseServerResponse(socketFd);
 
-    for(;;);
 
     //  关闭套接字的文件描述符
     close(socketFd);
+
+    return EXIT_SUCCESS;
 }
 
 

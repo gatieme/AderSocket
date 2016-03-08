@@ -1,18 +1,3 @@
-/*************************************************************************
-    > File Name: TcpClient.c
-    > Author: GatieMe
-    > Mail: gatieme@163.com
-    > Created Time: 2015年12月09日 星期三 16时26分46秒
- ************************************************************************/
-
-/**********************************************************
-    > File Name: server.c
-    > Author: GatieMe
-    > Mail: gatieme@163.com
-    > Created Time: 2015年04月11日 星期六 16时22分10秒
- *********************************************************/
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +18,7 @@
 #define BUFFER_SIZE                 4096
 #define IP_SIZE                     20
 #define MAX_FILENAME_SIZE           256
-#define LISTEN_QUEUE                20
+#define LISTEN_QUEUE                10
 #define MAX_ACCEPT_THREAD_COUNT     20
 
 
@@ -168,10 +153,7 @@ int main(int argc, char *argv[])
             printf("Create pthread %d...\n", threadPos);
         }
     }
-    while(1)
-    {
-        ;;;
-    }
+    
     while( 1 )
     {
         int connFd;
