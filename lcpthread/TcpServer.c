@@ -71,11 +71,11 @@ void RaiseClientRequest(
           int connFd,     /*  客户端的连接套接字描述符, 用于发送和接收数据  */
           struct sockaddr_in  clientAddr); /*  客户端的信息, 用于显示一些客户端的信息  */
 
-void RaiseThreadFunc(void *args);
+void* RaiseThreadFunc(void *args);
 
 
 //  accept pthread的多线程处理客户端连接的函数
-void AcceptThreadFunc(void *args);
+void* AcceptThreadFunc(void *args);
         //  nt scketFd  服务器的监听套接字描述符
 
 
@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 
 
 
-void AcceptThreadFunc(void *args)
+void* AcceptThreadFunc(void *args)
 {
     int *psocketFd = (int *)args;
     int socketFd = *psocketFd;
@@ -244,7 +244,7 @@ void AcceptThreadFunc(void *args)
         }
         else
         {
-            printf("Pthread id = %u, connfd = %d\n",
+            printf("Pthread id = %ld, connfd = %d\n",
                     (unsigned long)pthread_self(), connFd);
             ////////////////////////////////////////////////////////////////////////
             //
@@ -274,6 +274,8 @@ void AcceptThreadFunc(void *args)
             }
         }
     }
+
+    return NULL;
 
 }
 
@@ -460,7 +462,7 @@ void TcpServerPushFile(
 
 }
 
-void RaiseThreadFunc(void *args)
+void* RaiseThreadFunc(void *args)
 {
     arg_type            *arg        = (arg_type *)args;
     int                 connFd      = arg->connFd;
@@ -470,6 +472,7 @@ void RaiseThreadFunc(void *args)
     printf("==DEBUG== connfd = %d, client = %s\n", connFd,  inet_ntoa(clientAddr.sin_addr));
 #endif
     RaiseClientRequest(connFd, clientAddr);
+    return NULL;
 }
 
 

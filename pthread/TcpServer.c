@@ -63,7 +63,7 @@ void RaiseClientRequest(
         int connFd,     /*  客户端的连接套接字描述符, 用于发送和接收数据  */
         struct sockaddr_in  clientAddr); /*  客户端的信息, 用于显示一些客户端的信息  */
 
-void RaiseThreadFunc(void *args);
+void* RaiseThreadFunc(void *args);
 
 
 
@@ -376,7 +376,7 @@ void TcpServerPushFile(
 
 }
 
-void RaiseThreadFunc(void *args)
+void* RaiseThreadFunc(void *args)
 {
 
     arg_type            *arg        = (arg_type *)args;
@@ -384,6 +384,8 @@ void RaiseThreadFunc(void *args)
     struct sockaddr_in  clientAddr  = arg->clientAddr;
 
     RaiseClientRequest(connFd, clientAddr);
+
+    return NULL;
 }
 
 

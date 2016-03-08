@@ -2,7 +2,7 @@ ROOT=../
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-target:=TcpClient TcpServer SCClient
+target:=TcpClient TcpServer SCClient SCMClient
 
 
 all:$(target)
@@ -16,7 +16,11 @@ TcpServer: TcpServer.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 	echo "简单的一次通信服务器..."
 
-SCClient : SimulatedConcurrencyClient.o
+SCClient : SCClient.o
+	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
+	echo "简单的一次通信服务器..."
+
+SCMClient : SCMClient.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 	echo "简单的一次通信服务器..."
 

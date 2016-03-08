@@ -40,7 +40,7 @@ void TcpClientPullFile(int socketFd, char *filePath);
 void TcpClientPushFile(int socketFd, char *filePath);
 
 //  客户端线程的处理函数
-void ClientThreadFunc(void *args);
+void* ClientThreadFunc(void *args);
 
 int main(int argc, char *argv[])
 {
@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
-void ClientThreadFunc(void *args)
+void* ClientThreadFunc(void *args)
 {
     char *serverIp = (char *)args;
     /**********************************************************
@@ -316,7 +316,7 @@ void RaiseServerResponse(int socketFd)
 
     // 上传文件到服务器
     printf("===========push file===========\n");
-    TcpClientPushFile(socketFd, "./cdata/cpush");
+    TcpClientPushFile(socketFd, (char *)"./cdata/cpush");
     printf("===========push file===========\n\n\n");
 
     // 上传文件到服务器
