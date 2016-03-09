@@ -318,6 +318,7 @@ int main(int argc, char *argv[])
     //if(listen(socketFd, LISTEN_QUEUE))
     //  系统中每一个端口最大的监听队列的长度
     //  这是个全局的参数,默认值为128
+    //  http://blog.csdn.net/taolinke/article/details/6800979
     if(listen(socketFd, SOMAXCONN))
     {
         printf("Server listen error[errno = %d]...\n", errno);
@@ -357,14 +358,15 @@ int main(int argc, char *argv[])
 
         if((nready = select(maxfd + 1, &rset, (fd_set *)NULL, (fd_set *)NULL, &timeout)) < 0) //一开始select监听的是监听口
         {
-            perror("select eoor...\n");
+            //  如果有timeout设置，那么每次select之前都要再重新设置一下timeout的值
+            //  因为select会修改timeout的值。
+            perror("select error...\n");
             exit(-1);
         }
         else if(nready == 0)
         {
             printf(".");
             fflush(stdout);
-
             continue;
         }
 
