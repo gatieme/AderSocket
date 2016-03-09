@@ -2,7 +2,7 @@ ROOT=.
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-DIRS=simple fork pthread lcpthread
+DIRS=simple fork pthread lcpthread select
 
 
 all:

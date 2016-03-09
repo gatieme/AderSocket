@@ -1,18 +1,3 @@
-/*************************************************************************
-    > File Name: TcpClient.c
-    > Author: GatieMe
-    > Mail: gatieme@163.com
-    > Created Time: 2015年12月09日 星期三 16时26分46秒
- ************************************************************************/
-
-/**********************************************************
-    > File Name: server.c
-    > Author: GatieMe
-    > Mail: gatieme@163.com
-    > Created Time: 2015年04月11日 星期六 16时22分10秒
- *********************************************************/
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +12,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <signal.h>
+
+// for select
+#include <sys/select.h>
 
 #define TCP_SERVER_PORT     6666    /*  服务器的端口  */
 #define BUFFER_SIZE         4096
@@ -227,7 +215,7 @@ void RaiseClientRequest(
     char buffer[BUFFER_SIZE];
 
     //  首先测试接收客户端发送来的数据
-    printf("===========recv data===========\n");
+    printf("===========recv data start===========\n");
     bzero(buffer, BUFFER_SIZE);
     if((count = recv(connFd, buffer, BUFFER_SIZE, 0)) < 0)
     {
@@ -239,11 +227,11 @@ void RaiseClientRequest(
         printf("recv %d data : %s\n", count, buffer);
         printf("接收%d个数据 : %s\n", count, buffer);
     }
-    printf("===========recv data===========\n\n\n");
+    printf("===========recv data end=============\n\n\n");
 
 
     //  接着测试向客户端发送反馈数据
-    printf("===========send data===========\n");
+    printf("===========send data start===========\n");
     bzero(buffer, BUFFER_SIZE);
     strcpy(buffer, "I am fine !");
     if((count = send(connFd, buffer, strlen(buffer) + 1, 0)) < 0)
@@ -256,13 +244,13 @@ void RaiseClientRequest(
         printf("send data[%s] success...\n", buffer);
         printf("发送数据[%s]成功...\n", buffer);
     }
-    printf("===========send data===========\n\n\n");
+    printf("===========send data end=============\n\n\n");
 
 
     //  首先测试接收客户端发送来的数据
-    printf("===========pull file============\n");
-    TcpServerPullFile(connFd, clientAddr, "./sdata/"); /*  将客户端发送来的文件存储在./sdata目录下　　*/
-    printf("===========pull file============\n");
+    //printf("===========pull file start============\n");
+    //TcpServerPullFile(connFd, clientAddr, "./sdata/"); /*  将客户端发送来的文件存储在./sdata目录下　　*/
+    //printf("===========pull file end==============\n");
 
     //  首先测试接收客户端发送来的数据
     //printf("===========pull file============\n");
@@ -327,7 +315,10 @@ int main(int argc, char *argv[])
      *  开始监听服务器绑定的端口
      *
      **********************************************************/
-    if(listen(socketFd, LISTEN_QUEUE))
+    //if(listen(socketFd, LISTEN_QUEUE))
+    //  系统中每一个端口最大的监听队列的长度
+    //  这是个全局的参数,默认值为128
+    if(listen(socketFd, SOMAXCONN))
     {
         printf("Server listen error[errno = %d]...\n", errno);
         exit(-1);
@@ -338,34 +329,150 @@ int main(int argc, char *argv[])
         printf("服务器开始监听...\n");
     }
 
-    struct sockaddr_in  clientAddr;
-    socklen_t           length = sizeof(clientAddr);
-    int                 connFd;
+
+    //  values for select
+    int             pos, maxpos, maxfd, selectFd;
+    int             nready, client[FD_SETSIZE];
+    fd_set          rset, allset;
+    struct  timeval timeout;
+
+    //  initial "select" elements
+    maxfd  = socketFd;                     //新增listenfd，所以更新当前的最大fd
+    maxpos = -1;
+    for(pos = 0; pos < FD_SETSIZE; pos++)
+    {
+        client[pos] = -1;
+    }
+
+    FD_ZERO(&allset);
+    FD_SET(socketFd, &allset);
+
+
 
     while( 1 )
     {
-        connFd = accept(socketFd, (struct sockaddr*)&clientAddr, &length);
+        rset = allset;   //rset和allset的搭配使得新加入的fd要等到下次select才会被监听
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 500000;
 
-        if(connFd == -1)
+        if((nready = select(maxfd + 1, &rset, (fd_set *)NULL, (fd_set *)NULL, &timeout)) < 0) //一开始select监听的是监听口
         {
-            printf("accept error[%d]...\n", errno);
+            perror("select eoor...\n");
+            exit(-1);
+        }
+        else if(nready == 0)
+        {
+            printf(".");
+            fflush(stdout);
+
             continue;
         }
-        else
+
+        //  如果有timeout设置，那么每次select之前都要再重新设置一下timeout的值
+        //  因为select会修改timeout的值。
+        if(FD_ISSET(socketFd, &rset))
         {
-            printf("获取到从客户端%s的连接...\n", inet_ntoa(clientAddr.sin_addr));
-            ////////////////////////////////////////////////////////////////////////
-            //
-            //  这里填写服务器的处理代码
-            //
-            ////////////////////////////////////////////////////////////////////////
-            RaiseClientRequest(connFd, clientAddr);
-            //   关闭客户端的套接字描述符
-            close(connFd);
+
+            struct sockaddr_in  clientAddr;
+            socklen_t           length = sizeof(clientAddr);
+            int                 connFd;
+
+            if((connFd = accept(socketFd, (struct sockaddr*)&clientAddr, &length)) == -1)
+            {
+                perror("accept error...\n");
+                continue;
+            }
+            else
+            {
+                printf("获取到从客户端%s : 端口%d的连接, 套接字描述符%d...\n",
+                        inet_ntoa(clientAddr.sin_addr),
+                        ntohs(clientAddr.sin_port),
+                        connFd);
+            }
+
+            // 新加入的描述符，还没判断是否可以或者写
+            // 所以后面使用rset而不是allset
+            FD_SET(connFd, &allset);
+
+            if (connFd > maxfd)  //  maxfd是为了下次select，作为参数使用
+            {
+                maxfd = connFd;
+            }
+
+            FD_CLR(socketFd, &rset);
+
+            if(--nready <= 0)  //  nready用来辅助计数，这样就不要遍历整个client数组
+            {
+                continue;
+            }
+
+            for(pos = 0; pos < FD_SETSIZE; pos++)
+            {
+                if (client[pos] < 0)
+                {
+                    client[pos] = connFd;    //找一个最小的插进入，并且缓存在client中，这样就不需要遍历所有fd，包括为0位的，来查看是否ISSET
+                    break;
+                }
+            }
+
+            if(pos == FD_SETSIZE)
+            {
+                printf("too many clients\n");
+                exit(0);
+            }
+
+
+            if(pos > maxpos)
+            {
+                maxpos = pos;
+            }
+
+            for(pos = 0; pos <= maxpos; pos++)
+            {
+                if( (selectFd = client[pos]) <0)
+                {
+                    continue;
+                }
+
+                if(FD_ISSET(selectFd, &rset))
+                {
+                    //单进程的环境下，不可以阻塞在这里，可以选择非阻塞，线程，超时.也就无法防范拒绝服务的攻击
+                    ////比较适合短连接的情况
+
+                    //单进程不使用fork的情况！
+                    //test fork
+                    //          if((childpid=fork())==0)
+                    //          {
+                    //              close(socketFd);
+                    ////////////////////////////////////////////////////////////////////////
+                    //
+                    //  这里填写服务器的处理代码
+                    //
+                    ////////////////////////////////////////////////////////////////////////
+                    RaiseClientRequest(connFd, clientAddr);
+
+                    close(connFd);
+
+                }
+                //             else if (childpid<0)
+                //             printf("fork error: %s\n",strerror(errno));
+                //close(connfd);
+                //test fork
+
+                FD_CLR(selectFd, &allset);                  //清除，表示已被处理
+                client[pos] = -1;
+
+                printf("can read : %d, %d, %d\n", pos, selectFd, nready);
+                if(--nready <= 0)      //nready用来辅助计数，这样就不要遍历整个client数组
+                {
+                    break;
+                }
+            }
         }
     }
-                //        sleep(10);
 
+
+    return EXIT_SUCCESS;
 }
 
 
