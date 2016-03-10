@@ -30,3 +30,11 @@ SCMClient : SCMClient.o
 clean :
 	rm *.o
 	rm $(target)
+
+
+test :
+	gcc server.c -o server
+	gcc -pedantic -Os client.c -o client -std=c99 -D_GNU_SOURCE
+	
+	gcc server2.c -o server2
+	gcc -pedantic -Os client2.c -o client2 -std=c99 -D_GNU_SOURCE -lpthread
