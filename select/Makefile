@@ -2,12 +2,12 @@ ROOT=../
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-target:=TcpClient TcpServer SCClient SCMClient
+target:=TcpClient NBAcceptServer SCClient SCMClient
 
 
 all:$(target)
 
-TcpServer: TcpServer.o
+NBAcceptServer: NBAcceptServer.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
 	echo "处理高并发的通信服务器(开辟一个线程池来处理accept)..."
 
@@ -31,10 +31,12 @@ clean :
 	rm *.o
 	rm $(target)
 
-
+clean_test :
+	rm server client
+	rm server2 client2
 test :
 	gcc server.c -o server
 	gcc -pedantic -Os client.c -o client -std=c99 -D_GNU_SOURCE
-	
+
 	gcc server2.c -o server2
 	gcc -pedantic -Os client2.c -o client2 -std=c99 -D_GNU_SOURCE -lpthread
