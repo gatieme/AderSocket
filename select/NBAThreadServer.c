@@ -15,7 +15,7 @@
 
 // for select
 #include <sys/select.h>
-
+#include <pthread.h>
 #define TCP_SERVER_PORT     6666    /*  服务器的端口  */
 #define BUFFER_SIZE         4096
 #define IP_SIZE             20
@@ -284,6 +284,28 @@ void RaiseClientRequest(
 }
 
 
+typedef struct arg_type
+{
+    int                 connFd;
+    struct sockaddr_in  clientAddr;
+} arg_type;
+
+
+void *RaiseThreadFunc(void *args)
+{
+    arg_type            *arg        = (arg_type *)args;
+
+    int                 connFd      = arg->connFd;
+    struct sockaddr_in  clientAddr  = arg->clientAddr;
+
+    pthread_detach(pthread_self());
+
+    RaiseClientRequest(connFd, clientAddr);
+
+    return NULL;
+}
+
+
 extern int errno;
 int main(int argc, char *argv[])
 {
@@ -468,7 +490,13 @@ int main(int argc, char *argv[])
                 //
                 ////////////////////////////////////////////////////////////////////////
                 printf("开始与客户端通信, 套接字描述符fd = %d\n", fd);
-                RaiseClientRequest(fd, clientAddr);
+
+                pthread_t   pthread;
+                arg_type    args = { fd, clientAddr };
+                if(pthread_create(&pthread, NULL, RaiseThreadFunc, &args) != 0)
+                {
+                    perror("thread create error...\n");
+                }
 
                 //  清楚allset的对应位，以备fd可被继续select监听
                 FD_CLR(fd, &allset);                  //清除，表示已被处理
@@ -483,6 +511,5 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
-
 
 

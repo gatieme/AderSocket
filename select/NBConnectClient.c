@@ -12,19 +12,16 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <pthread.h>
+#include <sys/select.h>
+
+
+
 #define TCP_SERVER_PORT     6666
 #define MAX_FILENAME_SIZE   256
 #define IP_SIZE             20
 
 #define BUFFER_SIZE         4096
 
-
-#define MAX_CLIENT_COUNT    1000   //  模拟1000个客户端
-
-pthread_mutex_t mut         =   PTHREAD_MUTEX_INITIALIZER;   //  互斥量
-pthread_cond_t  cond        =   PTHREAD_COND_INITIALIZER;    //  条件变量
-int             condValue   =   1;
 
 
 extern int errno;
@@ -39,8 +36,7 @@ void TcpClientPullFile(int socketFd, char *filePath);
 /* 客户端将文件上传到服务器上 */
 void TcpClientPushFile(int socketFd, char *filePath);
 
-//  客户端线程的处理函数
-void* ClientThreadFunc(void *args);
+
 
 int main(int argc, char *argv[])
 {
@@ -60,33 +56,6 @@ int main(int argc, char *argv[])
         strcpy(serverIp, argv[1]);
     }
 
-    pthread_t client[MAX_CLIENT_COUNT];
-
-    for(int threadPos = 0;
-        threadPos < MAX_CLIENT_COUNT;
-        threadPos++)
-    {
-        if(pthread_create(&client[threadPos], NULL, ClientThreadFunc, serverIp) != 0)
-        {
-            perror("create client thread error...\n");
-        }
-    }
-
-
-    condValue = 2;
-    while(1)
-    {
-        sleep(2);
-
-        pthread_cond_broadcast(&cond);  //条件满足后发信号通知所有阻塞在条件变量上的线程！
-    }
-
-    return EXIT_SUCCESS;
-}
-
-void* ClientThreadFunc(void *args)
-{
-    char *serverIp = (char *)args;
     /**********************************************************
      *
      *  创建并初始化套接字
@@ -94,6 +63,7 @@ void* ClientThreadFunc(void *args)
      **********************************************************/
     struct sockaddr_in  serverAddr;          /*  服务器的套接字信息   */
     int                 socketFd;                      /*  客户端的套接字信息   */
+
 
     bzero(&serverAddr, sizeof(serverAddr));             /*  全部置零               */
 
@@ -105,22 +75,23 @@ void* ClientThreadFunc(void *args)
     /*  SOCK_STREAM 面向连接的套接字，即TCP   */
     socketFd                    =   socket(AF_INET, SOCK_STREAM, 0);
 
+    struct timeval      timeo = {3, 0};
+    socklen_t           len = sizeof(timeo);
+    setsockopt(socketFd, SOL_SOCKET, SO_SNDTIMEO, &timeo, len);
+
     if(socketFd < 0)
     {
         printf("socket error\n");
         exit(-1);
     }
-    printf("Wait for connect...\n");
-
-
-    pthread_cond_wait(&cond, &mut);
-    pthread_mutex_unlock(&mut);
-    //  信号会丢失，使得这里永远醒不了，所以需要重发信号.
-    //  直到在客户端的主函数中调用pthread_cond_broadcast(&cond);
 
     /*  尝试连接服务器  */
     if(connect(socketFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
     {
+        if (errno == EINPROGRESS)
+        {
+            fprintf(stderr, "timeout/n");
+        }
         printf("Can Not Connect To %s\n", serverIp);
         exit(1);
     }
@@ -130,6 +101,13 @@ void* ClientThreadFunc(void *args)
         printf("连接服务器成功...\n");
     }
 
+    int     maxfd;
+    fd_set  set;
+    maxfd = (int)fileno(stdin);
+    FD_ZERO(&set);
+    FD_SET(socketFd, &set);
+    FD_SET(maxfd, &set);
+    maxfd = (maxfd > socketFd ? maxfd : socketFd) + 1;
     /**********************************************************
      *
      *  下面进行正常的套接字通信
@@ -137,12 +115,16 @@ void* ClientThreadFunc(void *args)
      **********************************************************/
     RaiseServerResponse(socketFd);
 
+    for(;;);
 
     //  关闭套接字的文件描述符
     close(socketFd);
 
+
     return EXIT_SUCCESS;
 }
+
+
 
 
 /* 客户端将文件上传到服务器上 */
@@ -330,11 +312,11 @@ void RaiseServerResponse(int socketFd)
         printf("接收%d个数据 : %s\n", count, buffer);
     }
     printf("===========recv data===========\n\n\n");
-/*
+
     // 上传文件到服务器
-    printf("===========push file===========\n");
-    TcpClientPushFile(socketFd, "./cdata/cpush");
-    printf("===========push file===========\n\n\n");
+    //printf("===========push file===========\n");
+    //TcpClientPushFile(socketFd, "./cdata/cpush");
+    //printf("===========push file===========\n\n\n");
 
     // 上传文件到服务器
     //printf("===========push file===========\n");
@@ -342,7 +324,7 @@ void RaiseServerResponse(int socketFd)
     //printf("===========push file===========\n\n\n");
 
 
-*/
+
     //close(socketFd);
 
 }

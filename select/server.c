@@ -66,6 +66,7 @@
             printf("."); fflush(stdout);
             continue;
         }
+        printf("%d, nfound = %d", __LINE__, nfound);
         if (FD_ISSET(request_sock, &rset))
         {
             addrlen = sizeof(remote);
