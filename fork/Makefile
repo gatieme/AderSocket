@@ -10,11 +10,11 @@ all:$(target)
 
 TcpServer: TcpServer.o
 	$(CC) $^ -o $@ $(LDFLAGS)
-	echo "使用fork的b通信服务器...\n"
+	@echo "使用fork的b通信服务器..."
 
 TcpClient : TcpClient.o
 	$(CC) $^ -o $@ $(LDFLAGS)
-	echo "简单通信客户端...\n"
+	@echo "简单通信客户端..."
 
 %.o : %.c
 	$(CC) -c $^ -o $@  $(CFLAGS) $(DEFINES)

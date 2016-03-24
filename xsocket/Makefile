@@ -11,10 +11,10 @@ all:$(target)
 
 TcpClient : TcpClient.o
 	$(CC) $^ -o $@ $(LDFLAGS)
-	echo "简单的一次通信客户端..."
+	@echo "简单的一次通信客户端..."
 TcpServer: TcpServer.o
 	$(CC) $^ -o $@ $(LDFLAGS)
-	echo "简单的一次通信服务器..."
+	@echo "简单的一次通信服务器..."
 
 %.o : %.c
 	$(CC) -c $^ -o $@  $(CFLAGS) $(DEFINES) -I./include
