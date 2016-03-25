@@ -2,7 +2,7 @@ ROOT=../
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-target:=
+target:=server client
 
 
 all:$(target)

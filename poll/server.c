@@ -12,16 +12,19 @@
 #include <stdlib.h>
 #include <poll.h>
 
+#include <fcntl.h>
+#include <sys/poll.h>
+
 #define USER_LIMIT 5
 #define BUFFER_SIZE 64
 #define FD_LIMIT 65535
 
-struct client_data                  //  客户端的数据结构
+typedef struct client_data                  //  客户端的数据结构
 {
-    sockaddr_in address;            //
-    char* write_buf;                //  发送数据缓冲区
-    char buf[ BUFFER_SIZE ];        //  接收数据缓冲区
-};
+    struct sockaddr_in  address;            //
+    char*               write_buf;                //  发送数据缓冲区
+    char                buf[ BUFFER_SIZE ];        //  接收数据缓冲区
+}client_data;
 
 int setnonblocking( int fd )
 {
@@ -43,32 +46,64 @@ int main( int argc, char* argv[] )
     const char* ip = argv[1];
     int port = atoi( argv[2] );
 
+    int                 listenfd;
     int                 ret = 0;
     struct sockaddr_in  address;
+
+    client_data         *users = NULL;
 
     bzero( &address, sizeof( address ) );
     address.sin_family = AF_INET;
     inet_pton( AF_INET, ip, &address.sin_addr );
     address.sin_port = htons( port );
 
-    if(int listenfd = socket( PF_INET, SOCK_STREAM, 0 ) < 0)
+    //
+    //  创建服务器的监听套接字
+    //
+    if( ( listenfd = socket( PF_INET, SOCK_STREAM, 0 ) ) < 0)
     {
         perror("create socket error...\n");
+        exit(-1);
     }
     else
     {
         printf("create socket success...\n");
     }
 
+    //
+    //  命名服务器的监听套接字
+    //
+    if((ret = bind(listenfd, (struct sockaddr*)&address, sizeof(address))) < 0 )
+    {
 
-    ret = bind( listenfd, ( struct sockaddr* )&address, sizeof( address ) );
+        perror("bind socket error...\n");
+        exit(-1);
+    }
+    else
+    {
+        printf("bind socket success...\n");
+    }
+
+    if((ret = listen(listenfd, 5)) < 0)
+    {
+        perror("listen error...\n");
+    }
+    else
+    {
+        printf("start listen...\n");
+    }
     assert( ret != -1 );
 
-    ret = listen( listenfd, 5 );
-    assert( ret != -1 );
+    if((users = (client_data *)malloc(sizeof(client_data) * FD_LIMIT)) == NULL)
+    {
+        perror("malloc client_data error...");
+    }
+    else
+    {
+        printf("malloc client_data success...");
+    }
 
-    client_data* users = new client_data[FD_LIMIT];
-    pollfd fds[USER_LIMIT+1];
+    struct pollfd          fds[USER_LIMIT + 1];
     /*  Data structure describing a polling request.
         struct pollfd
         {
@@ -196,7 +231,7 @@ int main( int argc, char* argv[] )
         }
     }
 
-    delete [] users;
+    free(users);
     close( listenfd );
     return 0;
 }

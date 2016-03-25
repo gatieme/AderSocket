@@ -31,6 +31,7 @@ int main( int argc, char* argv[] )
 
     int sockfd = socket( PF_INET, SOCK_STREAM, 0 );
     assert( sockfd >= 0 );
+
     if ( connect( sockfd, ( struct sockaddr* )&server_address, sizeof( server_address ) ) < 0 )
     {
         printf( "connection failed\n" );
@@ -38,13 +39,14 @@ int main( int argc, char* argv[] )
         return 1;
     }
 
-    pollfd fds[2];
+    struct pollfd fds[2];
     fds[0].fd = 0;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
     fds[1].fd = sockfd;
     fds[1].events = POLLIN | POLLRDHUP;
     fds[1].revents = 0;
+
     char read_buf[BUFFER_SIZE];
     int pipefd[2];
     int ret = pipe( pipefd );
@@ -77,7 +79,7 @@ int main( int argc, char* argv[] )
             ret = splice( pipefd[0], NULL, sockfd, NULL, 32768, SPLICE_F_MORE | SPLICE_F_MOVE );
         }
     }
-    
+
     close( sockfd );
     return 0;
 }
