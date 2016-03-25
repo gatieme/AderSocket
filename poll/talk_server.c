@@ -239,6 +239,10 @@ int main( int argc, char* argv[] )
                 fds[i].events |= ~POLLOUT;
                 fds[i].events |= POLLIN;
             }
+            else
+            {
+                printf(".");
+            }
         }
     }
 

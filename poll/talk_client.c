@@ -40,9 +40,11 @@ int main( int argc, char* argv[] )
     }
 
     struct pollfd fds[2];
-    fds[0].fd = 0;
+    //  添加标准输入
+    fds[0].fd = STDIN_FILENO;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
+    //  添加套接字描述符
     fds[1].fd = sockfd;
     fds[1].events = POLLIN | POLLRDHUP;
     fds[1].revents = 0;
