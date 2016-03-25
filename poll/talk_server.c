@@ -112,6 +112,8 @@ int main( int argc, char* argv[] )
             short int revents;           fd 上实际发生的事件.
         };
     */
+
+    /// 初始化poll的
     int user_counter = 0;
     for( int i = 1; i <= USER_LIMIT; ++i )
     {
@@ -119,24 +121,32 @@ int main( int argc, char* argv[] )
         fds[i].events = 0;
     }
     fds[0].fd = listenfd;
-    fds[0].events = POLLIN | POLLERR;
+    fds[0].events = POLLIN | POLLERR;           //  POLLIN表示有数据可读, POLLERR表示出错
     fds[0].revents = 0;
 
     while( 1 )
     {
-        ret = poll( fds, user_counter+1, -1 );
+        ret = poll( fds,                        //  准备轮训的套接字文件描述符
+                    user_counter + 1,           //
+                    -1);                        //   poll 永远等待。poll() 只有在一个描述符就绪时返回，或者在调用进程捕捉到信号时返回
         if ( ret < 0 )
         {
             printf( "poll failure\n" );
             break;
         }
 
-        for( int i = 0; i < user_counter+1; ++i )
+        ///
+        /// poll模型的本质就是轮训, 在pull返回时，轮询所有的文件描述符, 查找到有事情请求的那个文件
+        ///
+        for( int i = 0; i < user_counter + 1; ++i )
         {
-            if( ( fds[i].fd == listenfd ) && ( fds[i].revents & POLLIN ) )
+            if((fds[i].fd == listenfd)                  /*  监听的是服务器套接字, 此时如果有数据可读，说明有客户端请求链接*/
+             && (fds[i].revents & POLLIN))              /*  有数据可读取  */
             {
-                struct sockaddr_in client_address;
-                socklen_t client_addrlength = sizeof( client_address );
+                struct sockaddr_in  client_address;
+                socklen_t           client_addrlength = sizeof( client_address );
+
+                //  开始接收客户端的链接
                 int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
                 if ( connfd < 0 )
                 {
@@ -151,6 +161,7 @@ int main( int argc, char* argv[] )
                     close( connfd );
                     continue;
                 }
+
                 user_counter++;
                 users[connfd].address = client_address;
                 setnonblocking( connfd );
@@ -159,7 +170,7 @@ int main( int argc, char* argv[] )
                 fds[user_counter].revents = 0;
                 printf( "comes a new user, now have %d users\n", user_counter );
             }
-            else if( fds[i].revents & POLLERR )
+            else if( fds[i].revents & POLLERR )                     //  数据出错
             {
                 printf( "get an error from %d\n", fds[i].fd );
                 char errors[ 100 ];
@@ -171,7 +182,7 @@ int main( int argc, char* argv[] )
                 }
                 continue;
             }
-            else if( fds[i].revents & POLLRDHUP )
+            else if( fds[i].revents & POLLRDHUP )                   //  被挂起---断开
             {
                 users[fds[i].fd] = users[fds[user_counter].fd];
                 close( fds[i].fd );
@@ -180,7 +191,7 @@ int main( int argc, char* argv[] )
                 user_counter--;
                 printf( "a client left\n" );
             }
-            else if( fds[i].revents & POLLIN )
+            else if( fds[i].revents & POLLIN )                      //  客户端套接字有数据可写
             {
                 int connfd = fds[i].fd;
                 memset( users[connfd].buf, '\0', BUFFER_SIZE );
@@ -216,7 +227,7 @@ int main( int argc, char* argv[] )
                     }
                 }
             }
-            else if( fds[i].revents & POLLOUT )
+            else if( fds[i].revents & POLLOUT )                     //  服务器向外发送数据
             {
                 int connfd = fds[i].fd;
                 if( ! users[connfd].write_buf )

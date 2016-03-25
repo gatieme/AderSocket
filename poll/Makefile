@@ -2,36 +2,30 @@ ROOT=../
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-target:=server client
+target:=talk_server talk_client echo_server echo_client
 
 
 all:$(target)
 
-
-NBAcceptServer: NBAcceptServer.o
+talk_server : talk_server.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "select模式下的单进程非阻塞accept服务器..."
+	@echo $@"==poll多路复用的聊天服务器程序..."
+	@echo ""
 
-NBAForkServer: NBAForkServer.o
+talk_client : talk_client.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "select模式下的多进程非阻塞accept服务器..."
+	@echo $@"==poll多路复用的聊天客户端程序..."
+	@echo ""
 
-NBAThreadServer: NBAThreadServer.o
+echo_server : echo_server.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "select模式下的多线程非阻塞accept服务器..."
+	@echo $@"==poll多路复用的回显服务器程序..."
+	@echo ""
 
-TcpClient : TcpClient.o
+echo_client : echo_client.o
 	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "简单的一次通信客户端..."
-
-
-SCClient : SCClient.o
-	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "简单的模拟高并发的客户端..."
-
-SCMClient : SCMClient.o
-	$(CC) $^ -o $@ $(LDFLAGS) -lpthread
-	@echo "带线程锁的模拟高并发的客户端..."
+	@echo $@"==poll多路复用的回显客户端程序..."
+	@echo ""
 
 %.o : %.c
 	$(CC) -c $^ -o $@  $(CFLAGS) $(DEFINES)
@@ -40,12 +34,3 @@ clean :
 	rm *.o
 	rm $(target)
 
-clean_test :
-	rm server client
-	rm server2 client2
-test :
-	gcc server.c -o server
-	gcc -pedantic -Os client.c -o client -std=c99 -D_GNU_SOURCE
-
-	gcc server2.c -o server2
-	gcc -pedantic -Os client2.c -o client2 -std=c99 -D_GNU_SOURCE -lpthread
