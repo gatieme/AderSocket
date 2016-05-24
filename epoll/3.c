@@ -25,10 +25,10 @@ typedef struct myevent_s
     void (*call_back)(int fd, int events, void *arg);
     int events;
     void *arg;
-    int status; // 1: in epoll wait list, 0 not in
-    char buff[128]; // recv data buffer
+    int status;                     // 1: in epoll wait list, 0 not in
+    char buff[128];                 // recv data buffer
     int len, s_offset;
-    long last_active; // last active time
+    long last_active;               // last active time
 }myevent_s;
 
 int g_epollFd;
@@ -281,16 +281,19 @@ int main(int argc, char **argv)
         for(int i = 0; i < fds; i++)
         {
             myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
+
             if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)) // read event
             {
                 ev->call_back(ev->fd, events[i].events, ev->arg);
             }
+
             if((events[i].events&EPOLLOUT)&&(ev->events&EPOLLOUT)) // write event
             {
                 ev->call_back(ev->fd, events[i].events, ev->arg);
             }
         }
     }
+
     // free resource
     return 0;
 }
