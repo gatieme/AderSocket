@@ -34,7 +34,7 @@ typedef struct myevent_s
 }myevent_s;
 
 int g_epollFd;
-myevent_s g_Events[MAX_EVENTS+1]; // g_Events[MAX_EVENTS] is used by listen fd
+myevent_s g_Events[MAX_EVENTS + 1]; // g_Events[MAX_EVENTS] is used by listen fd
 
 
 // set event
@@ -70,25 +70,39 @@ void EventSet(myevent_s *ev, int fd, void (*call_back)(int, int, void *), void *
     ev->last_active = time(NULL);
 }
 
-
+/*
+ * we can use epoll_ctl to add, modify or delete an stream event
+ * epoll_ctl(epollfd, EPOLL_CTL_ADD, socket, EPOLLIN);//注册缓冲区非空事件，即有数据流入
+ * epoll_ctl(epollfd, EPOLL_CTL_DEL, socket, EPOLLOUT);//注册缓冲区非满事件，即流可以被写入
+ *
+ * */
 // add/mod an event to epoll
 void EventAdd(int epollFd, int events, myevent_s *ev)
 {
     struct epoll_event epv = {0, {0}};
     int op;
+
     epv.data.ptr = ev;
     epv.events = ev->events = events;
-    if(ev->status == 1){
+
+    if(ev->status == 1)
+    {
         op = EPOLL_CTL_MOD;
     }
-    else{
+    else
+    {
         op = EPOLL_CTL_ADD;
         ev->status = 1;
     }
+
     if(epoll_ctl(epollFd, op, ev->fd, &epv) < 0)
+    {
         printf("Event Add failed[fd=%d], evnets[%d]\n", ev->fd, events);
+    }
     else
+    {
         printf("Event Add OK[fd=%d], op=%d, evnets[%0X]\n", ev->fd, op, events);
+    }
 }
 
 // delete an event from epoll
@@ -207,18 +221,24 @@ void SendData(int fd, int events, void *arg)
 void InitListenSocket(int epollFd, short port)
 {
     int listenFd = socket(AF_INET, SOCK_STREAM, 0);
+
     fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking
     printf("server listen fd=%d\n", listenFd);
+
     EventSet(&g_Events[MAX_EVENTS], listenFd, AcceptConn, &g_Events[MAX_EVENTS]);
+
     // add listen socket
     EventAdd(epollFd, EPOLLIN, &g_Events[MAX_EVENTS]);
+
     // bind & listen
     struct sockaddr_in sin;
     bzero(&sin, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
     sin.sin_port = htons(port);
+
     bind(listenFd, (const struct sockaddr*)&sin, sizeof(sin));
+
     listen(listenFd, 5);
 }
 
@@ -246,28 +266,41 @@ int main(int argc, char **argv)
 
     // create & bind listen socket, and add to epoll, set non-blocking
     InitListenSocket(g_epollFd, port);
+    printf("server running : port [ %d ]\n", port);
 
     // event loop
     struct epoll_event events[MAX_EVENTS];
-    printf("server running : port [ %d ]\n", port);
     int checkPos = 0;
 
     while(1)
     {
-        // a simple timeout check here, every time 100, better to use a mini-heap, and add timer event
+        // 1--a simple timeout check here, every time 100 loop all the fs delete the timoue one
+        // 2--it is best to use a data structure to connect the FD connection time to save,
+        // and orderly, so do not have to poll all the FD, but according to the time to poll.
+        // 3--use a mini-heap, and add timer event as the libevent do
         long now = time(NULL);
 
-        for(int i = 0; i < 100; i++, checkPos++) // doesn't check listen fd
+        //  check for timeut
+        for(int i = 0; i < 100; i++, checkPos++)
         {
-            if(checkPos == MAX_EVENTS)  checkPos = 0; // recycle
-            if(g_Events[checkPos].status != 1) continue;
+            // doesn't check listen fd, when listen fs recycle
+            if(checkPos == MAX_EVENTS)
+            {
+                checkPos = 0; // recycle
+            }
+
+            if(g_Events[checkPos].status != 1)
+            {
+                continue;
+            }
 
             long duration = now - g_Events[checkPos].last_active;
 
             if(duration >= 60) // 60s timeout
             {
                 close(g_Events[checkPos].fd);
-                printf("[fd=%d] timeout[%d--%d].\n", g_Events[checkPos].fd, g_Events[checkPos].last_active, now);
+
+                printf("[fd = %d] timeout[%d--%d].\n", g_Events[checkPos].fd, g_Events[checkPos].last_active, now);
                 EventDel(g_epollFd, &g_Events[checkPos]);
             }
         }
@@ -276,7 +309,7 @@ int main(int argc, char **argv)
         int fds = epoll_wait(g_epollFd, events, MAX_EVENTS, 1000);
         if(fds < 0)
         {
-            printf("epoll_wait error, exit\n");
+            perror("epoll_wait error ");
             break;
         }
 
@@ -284,12 +317,12 @@ int main(int argc, char **argv)
         {
             myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
 
-            if((events[i].events&EPOLLIN)&&(ev->events&EPOLLIN)) // read event
+            if((events[i].events & EPOLLIN) && (ev->events & EPOLLIN)) // read event
             {
                 ev->call_back(ev->fd, events[i].events, ev->arg);
             }
 
-            if((events[i].events&EPOLLOUT)&&(ev->events&EPOLLOUT)) // write event
+            if((events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT)) // write event
             {
                 ev->call_back(ev->fd, events[i].events, ev->arg);
             }
