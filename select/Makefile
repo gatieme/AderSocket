@@ -37,8 +37,8 @@ SCMClient : SCMClient.o
 	$(CC) -c $^ -o $@  $(CFLAGS) $(DEFINES)
 
 clean :
-	rm *.o
-	rm $(target)
+	rm -rf *.o
+	rm -rf $(target)
 
 clean_test :
 	rm server client

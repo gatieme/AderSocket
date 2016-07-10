@@ -18,6 +18,7 @@
 
 
 #define MAX_EVENTS 500
+#define TCP_SERVER_PORT     6666
 
 
 
@@ -55,6 +56,96 @@ void AcceptConn(int fd, int events, void *arg);
 
 void InitListenSocket(int epollFd, short port);
 
+
+int main(int argc, char **argv)
+{
+    unsigned short port = TCP_SERVER_PORT; // default port
+
+    if(argc == 2)
+    {
+        port = atoi(argv[1]);
+    }
+
+    // create epoll
+    g_epollFd = epoll_create(MAX_EVENTS);
+    if(g_epollFd <= 0)
+    {
+        perror("epoll_create : ");
+        printf("create epoll failed.%d\n", g_epollFd);
+    }
+    else
+    {
+        printf("create epoll success...\n");
+    }
+
+    // create & bind listen socket, and add to epoll, set non-blocking
+    InitListenSocket(g_epollFd, port);
+    printf("server running : port [ %d ]\n", port);
+
+    // event loop
+    struct epoll_event events[MAX_EVENTS];
+    int checkPos = 0;
+
+    while(1)
+    {
+        // 1--a simple timeout check here, every time 100 loop all the fs delete the timoue one
+        // 2--it is best to use a data structure to connect the FD connection time to save,
+        // and orderly, so do not have to poll all the FD, but according to the time to poll.
+        // 3--use a mini-heap, and add timer event as the libevent do
+        long now = time(NULL);
+
+        //  check for timeut
+        for(int i = 0; i < 100; i++, checkPos++)
+        {
+            // doesn't check listen fd, when listen fs recycle
+            if(checkPos == MAX_EVENTS)
+            {
+                checkPos = 0; // recycle
+            }
+
+            if(g_Events[checkPos].status != 1)
+            {
+                continue;
+            }
+
+            long duration = now - g_Events[checkPos].last_active;
+
+            if(duration >= 60) // 60s timeout
+            {
+                close(g_Events[checkPos].fd);
+
+                printf("[fd = %d] timeout[%d--%d].\n", g_Events[checkPos].fd, g_Events[checkPos].last_active, now);
+                EventDel(g_epollFd, &g_Events[checkPos]);
+            }
+        }
+
+        // wait for events to happen
+        int fds = epoll_wait(g_epollFd, events, MAX_EVENTS, 1000);
+        if(fds < 0)
+        {
+            perror("epoll_wait error ");
+            break;
+        }
+        // after epoll_wait, shoule loop all the event that will be happend
+        for(int i = 0; i < fds; i++)
+        {
+            myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
+
+            if((events[i].events & EPOLLIN) && (ev->events & EPOLLIN)) // read event
+            {
+                ev->call_back(ev->fd, events[i].events, ev->arg);
+            }
+
+            if((events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT)) // write event
+            {
+                ev->call_back(ev->fd, events[i].events, ev->arg);
+            }
+        }
+    }
+
+    // free resource
+    return 0;
+}
 
 // set event
 void EventSet(myevent_s *ev, int fd, void (*call_back)(int, int, void *), void *arg)
@@ -242,93 +333,28 @@ void InitListenSocket(int epollFd, short port)
     listen(listenFd, 5);
 }
 
-
-
-int main(int argc, char **argv)
+//  功能:设置socket为非阻塞的
+static int SetSocketNonBlock(int sfd)
 {
-    unsigned short port = 12345; // default port
-    if(argc == 2)
+    int flags, s;
+
+    //  得到文件状态标志
+    flags = fcntl (sfd, F_GETFL, 0);
+    if (flags == -1)
     {
-        port = atoi(argv[1]);
+      perror ("fcntl");
+      return -1;
     }
 
-    // create epoll
-    g_epollFd = epoll_create(MAX_EVENTS);
-    if(g_epollFd <= 0)
+    //  设置文件状态标志
+    flags |= O_NONBLOCK;
+    s = fcntl (sfd, F_SETFL, flags);
+    if (s == -1)
     {
-        perror("epoll_create : ");
-        printf("create epoll failed.%d\n", g_epollFd);
-    }
-    else
-    {
-        printf("create epoll success...\n");
+        perror ("fcntl");
+        return -1;
     }
 
-    // create & bind listen socket, and add to epoll, set non-blocking
-    InitListenSocket(g_epollFd, port);
-    printf("server running : port [ %d ]\n", port);
-
-    // event loop
-    struct epoll_event events[MAX_EVENTS];
-    int checkPos = 0;
-
-    while(1)
-    {
-        // 1--a simple timeout check here, every time 100 loop all the fs delete the timoue one
-        // 2--it is best to use a data structure to connect the FD connection time to save,
-        // and orderly, so do not have to poll all the FD, but according to the time to poll.
-        // 3--use a mini-heap, and add timer event as the libevent do
-        long now = time(NULL);
-
-        //  check for timeut
-        for(int i = 0; i < 100; i++, checkPos++)
-        {
-            // doesn't check listen fd, when listen fs recycle
-            if(checkPos == MAX_EVENTS)
-            {
-                checkPos = 0; // recycle
-            }
-
-            if(g_Events[checkPos].status != 1)
-            {
-                continue;
-            }
-
-            long duration = now - g_Events[checkPos].last_active;
-
-            if(duration >= 60) // 60s timeout
-            {
-                close(g_Events[checkPos].fd);
-
-                printf("[fd = %d] timeout[%d--%d].\n", g_Events[checkPos].fd, g_Events[checkPos].last_active, now);
-                EventDel(g_epollFd, &g_Events[checkPos]);
-            }
-        }
-
-        // wait for events to happen
-        int fds = epoll_wait(g_epollFd, events, MAX_EVENTS, 1000);
-        if(fds < 0)
-        {
-            perror("epoll_wait error ");
-            break;
-        }
-
-        for(int i = 0; i < fds; i++)
-        {
-            myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
-
-            if((events[i].events & EPOLLIN) && (ev->events & EPOLLIN)) // read event
-            {
-                ev->call_back(ev->fd, events[i].events, ev->arg);
-            }
-
-            if((events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT)) // write event
-            {
-                ev->call_back(ev->fd, events[i].events, ev->arg);
-            }
-        }
-    }
-
-    // free resource
     return 0;
 }
+

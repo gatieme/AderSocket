@@ -4,7 +4,6 @@ include $(ROOT)/Make.defines.$(PLATFORM)
 
 target:=TcpClient TcpServer SCClient SCMClient
 
-
 all:$(target)
 
 TcpServer: TcpServer.o

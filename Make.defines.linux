@@ -24,5 +24,7 @@ AWK=awk
 LIBAPUE=
 
 
+GITHUB_COMMIT=$(COMMIT)
+
 # Common temp files to delete from each directory.
 TEMPFILES=core core.* *.o temp.* *.out

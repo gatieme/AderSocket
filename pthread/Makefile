@@ -22,5 +22,5 @@ TcpClient : TcpClient.o
 	$(CC) -c $^ -o $@  $(CFLAGS) $(DEFINES)
 
 clean :
-	rm *.o
-	rm $(target)
+	rm -rf *.o
+	rm -rf $(target)
