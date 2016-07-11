@@ -1,3 +1,4 @@
+//  代码清单9-3 LT和ET模式
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,6 +15,11 @@
 
 #define MAX_EVENT_NUMBER 1024
 #define BUFFER_SIZE 10
+
+
+#define DEFAULT_SERVER_PORT 6666
+
+
 
 int setnonblocking( int fd )
 {
@@ -36,6 +42,14 @@ void addfd( int epollfd, int fd, bool enable_et )
     setnonblocking( fd );
 }
 
+
+/*  LT(Level Trigger, 电平触发)
+ *  相当于一个效率较高的poll
+ *  对于采用LT工作模式的文件描述符
+ *  当epoll_wait检测到其上时间发生并将此事件通知应用程序后
+ *  应用程序可以不用立即处理
+ *  这样下次调用时, 还会再次向应用程序通知此时间
+ */
 void lt( epoll_event* events, int number, int epollfd, int listenfd )
 {
     char buf[ BUFFER_SIZE ];
@@ -51,7 +65,7 @@ void lt( epoll_event* events, int number, int epollfd, int listenfd )
         }
         else if ( events[i].events & EPOLLIN )
         {
-            printf( "event trigger once\n" );
+            printf( "LT-event trigger once\n" );
             memset( buf, '\0', BUFFER_SIZE );
             int ret = recv( sockfd, buf, BUFFER_SIZE-1, 0 );
             if( ret <= 0 )
@@ -68,6 +82,12 @@ void lt( epoll_event* events, int number, int epollfd, int listenfd )
     }
 }
 
+/*  ET模式的工作流程
+ *  对于采用ET模式的文件描述符号
+ *  当epoll_wait检测到其上由事件发生并将此时间通知应用程序后
+ *  应用程序应该立即处理该事件
+ *  因为后续的epoll_wait不会再向应用程序通知这一事件
+ */
 void et( epoll_event* events, int number, int epollfd, int listenfd )
 {
     char buf[ BUFFER_SIZE ];
@@ -83,7 +103,11 @@ void et( epoll_event* events, int number, int epollfd, int listenfd )
         }
         else if ( events[i].events & EPOLLIN )
         {
-            printf( "event trigger once\n" );
+            /* 这段代码不会重复触发
+             * 因此我嫩循环读取数据
+             * 以确保把socket读缓存中的所有哦数据读出
+             */
+            printf( "ET-event trigger only once\n" );
             while( 1 )
             {
                 memset( buf, '\0', BUFFER_SIZE );
@@ -117,20 +141,38 @@ void et( epoll_event* events, int number, int epollfd, int listenfd )
 
 int main( int argc, char* argv[] )
 {
-    if( argc <= 2 )
+    int     port = DEFAULT_SERVER_PORT;
+    char    *ip = NULL;
+
+    if( argc > 3 )
     {
-        printf( "usage: %s ip_address port_number\n", basename( argv[0] ) );
+        printf( "usage: %s [port_number [ip_address]]\n", basename( argv[0] ) );
         return 1;
     }
-    const char* ip = argv[1];
-    int port = atoi( argv[2] );
+    else if (argc == 2)
+    {
+        port = atoi( argv[1] );
+    }
+    else if(argc == 3)
+    {
+        ip = argv[2];
+    }
 
     int ret = 0;
     struct sockaddr_in address;
     bzero( &address, sizeof( address ) );
     address.sin_family = AF_INET;
-    inet_pton( AF_INET, ip, &address.sin_addr );
-    address.sin_port = htons( port );
+    if(ip != NULL)
+    {
+        inet_pton( AF_INET, ip, &address.sin_addr );
+    }
+    else
+    {
+        address.sin_addr.s_addr = AF_INET;
+    }
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
 
     int listenfd = socket( PF_INET, SOCK_STREAM, 0 );
     assert( listenfd >= 0 );
@@ -154,9 +196,9 @@ int main( int argc, char* argv[] )
             printf( "epoll failure\n" );
             break;
         }
-    
-        lt( events, ret, epollfd, listenfd );
-        //et( events, ret, epollfd, listenfd );
+
+        //lt( events, ret, epollfd, listenfd );
+        et( events, ret, epollfd, listenfd );
     }
 
     close( listenfd );
