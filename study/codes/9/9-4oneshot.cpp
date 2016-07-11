@@ -1,3 +1,4 @@
+//  代码清单9-4 使用EPOLLONESHOT事件
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,8 +15,8 @@
 
 #define MAX_EVENT_NUMBER 1024
 #define BUFFER_SIZE 1024
-#define DEAFULT_SERVER_PORT 6666
-#define DEFAULT_SERVER_IP "127.0.0.1"
+
+#define DEFAULT_SERVER_PORT 6666
 
 
 struct fds
@@ -89,21 +90,36 @@ void* worker( void* arg )
 
 int main( int argc, char* argv[] )
 {
-    if( argc <= 1)
+    int port = DEFAULT_SERVER_PORT;
+    char *ip = NULL;
+
+    if( argc > 3)
     {
-        printf( "usage: %s ip_address port_number\n", basename( argv[0] ) );
+        printf( "usage: %s port_number ip_address\n", basename( argv[0] ) );
         return 1;
     }
-    else if(ar)
-
-    const char* ip = argv[1];
-    int port = atoi( argv[2] );
+    else if( argc == 2 )
+    {
+        port = atoi(argv[1]);
+    }
+    else if(argc == 3)
+    {
+        port = atoi(argv[1]);
+        ip = argv[2];
+    }
 
     int ret = 0;
     struct sockaddr_in address;
     bzero( &address, sizeof( address ) );
     address.sin_family = AF_INET;
-    inet_pton( AF_INET, ip, &address.sin_addr );
+    if(ip != NULL)
+    {
+        inet_pton( AF_INET, ip, &address.sin_addr );
+    }
+    else
+    {
+        address.sin_addr.s_addr = INADDR_ANY;
+    }
     address.sin_port = htons( port );
 
     int listenfd = socket( PF_INET, SOCK_STREAM, 0 );
