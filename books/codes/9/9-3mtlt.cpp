@@ -155,6 +155,7 @@ int main( int argc, char* argv[] )
     }
     else if(argc == 3)
     {
+        port = atoi( argv[1] );
         ip = argv[2];
     }
 
@@ -168,10 +169,9 @@ int main( int argc, char* argv[] )
     }
     else
     {
-        address.sin_addr.s_addr = AF_INET;
+        address.sin_addr.s_addr = INADDR_ANY;
     }
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
     int listenfd = socket( PF_INET, SOCK_STREAM, 0 );

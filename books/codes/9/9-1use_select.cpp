@@ -1,3 +1,4 @@
+//  代码清单9-1 使用select同时接收普通数据和带外数据
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -71,7 +72,7 @@ int main( int argc, char* argv[] )
                 	printf( "selection failure\n" );
                 	break;
         	}
-	
+
         	if ( FD_ISSET( connfd, &read_fds ) )
 		{
         		ret = recv( connfd, buf, sizeof( buf )-1, 0 );

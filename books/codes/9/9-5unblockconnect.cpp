@@ -1,3 +1,4 @@
+//  代码清单9-5 select非阻塞connect
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -86,7 +87,7 @@ int unblock_connect( const char* ip, int port, int time )
         close( sockfd );
         return -1;
     }
-    
+
     printf( "connection ready after select with the socket: %d \n", sockfd );
     fcntl( sockfd, F_SETFL, fdopt );
     return sockfd;

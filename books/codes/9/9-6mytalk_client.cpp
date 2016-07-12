@@ -1,4 +1,8 @@
+//  代码清单9-6 poll实现的聊天室客户端程序
+
 #define _GNU_SOURCE 1
+
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -12,6 +16,8 @@
 #include <fcntl.h>
 
 #define BUFFER_SIZE 64
+
+
 
 int main( int argc, char* argv[] )
 {
@@ -39,12 +45,16 @@ int main( int argc, char* argv[] )
     }
 
     pollfd fds[2];
+
+    /*  注册文件描述符0(标准输入)和文件描述符socket上的可读事件  */
     fds[0].fd = 0;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
+
     fds[1].fd = sockfd;
     fds[1].events = POLLIN | POLLRDHUP;
     fds[1].revents = 0;
+
     char read_buf[BUFFER_SIZE];
     int pipefd[2];
     int ret = pipe( pipefd );
@@ -73,11 +83,12 @@ int main( int argc, char* argv[] )
 
         if( fds[0].revents & POLLIN )
         {
+            /*  使用splice将用户输入的数据直接写到socket上(零拷贝)  */
             ret = splice( 0, NULL, pipefd[1], NULL, 32768, SPLICE_F_MORE | SPLICE_F_MOVE );
             ret = splice( pipefd[0], NULL, sockfd, NULL, 32768, SPLICE_F_MORE | SPLICE_F_MOVE );
         }
     }
-    
+
     close( sockfd );
     return 0;
 }

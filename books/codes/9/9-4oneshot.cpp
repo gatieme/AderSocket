@@ -19,11 +19,11 @@
 #define DEFAULT_SERVER_PORT 6666
 
 
-struct fds
+typedef struct fds_pthread_args
 {
    int epollfd;
    int sockfd;
-};
+}fds_pthread_args;
 
 int setnonblocking( int fd )
 {
@@ -64,18 +64,23 @@ void reset_oneshot( int epollfd, int fd )
     epoll_ctl( epollfd, EPOLL_CTL_MOD, fd, &event );
 }
 
+
 /*  工作线程  */
-void* worker( void* arg )
+void* worker( void* args )
 {
-    int sockfd = ( (fds*)arg )->sockfd;
-    int epollfd = ( (fds*)arg )->epollfd;
+    fds_pthread_args *_args = (fds_pthread_args *)args;
+
+    int sockfd = _args->sockfd;
+    int epollfd = _args->epollfd;
     printf( "start new thread to receive data on fd: %d\n", sockfd );
+
     char buf[ BUFFER_SIZE ];
     memset( buf, '\0', BUFFER_SIZE );
+
     /*  循环读取sockfd上的数据, 直到遇见EAGAIN错误  */
     while( 1 )
     {
-        int ret = recv( sockfd, buf, BUFFER_SIZE-1, 0 );
+        int ret = recv( sockfd, buf, BUFFER_SIZE - 1, 0 );
         if( ret == 0 )
         {
             close( sockfd );
@@ -84,6 +89,23 @@ void* worker( void* arg )
         }
         else if( ret < 0 )
         {
+            /*  首先我们看看recv的返回值：
+             *  EAGAIN、EWOULDBLOCK、EINTR与非阻塞 长连接
+             *  EWOULDBLOCK     用于非阻塞模式，不需要重新读或者写
+             *  EINTR           指操作被中断唤醒，需要重新读/写
+             *  在Linux环境下开发经常会碰到很多错误(设置errno)，
+             *  其中EAGAIN是其中比较常见的一个错误(比如用在非阻塞操作中)
+             *  从字面上来看, 是提示再试一次.
+             *  这个错误经常出现在当应用程序进行一些非阻塞(non-blocking)操作
+             *  (对文件或socket)的时候
+             *  例如，以 O_NONBLOCK的标志打开文件/socket/FIFO,
+             *  如果你连续做read操作而没有数据可读.
+             *  此时程序不会阻塞起来等待数据准备就绪返回,
+             *  read函数会返回一个错误EAGAIN，
+             *  提示你的应用程序现在没有数据可读请稍后再试重新读数据,
+             *  对非阻塞socket而言, EAGAIN不是一种错误。在VxWorks和Windows上,
+             *  EAGAIN的名字叫做EWOULDBLOCK
+             */
             if( errno == EAGAIN )
             {
                 reset_oneshot( epollfd, sockfd );
@@ -149,12 +171,12 @@ int main( int argc, char* argv[] )
     epoll_event events[ MAX_EVENT_NUMBER ];
     int epollfd = epoll_create( 5 );
     assert( epollfd != -1 );
+
     /*   注意, 监听套接字listen上不能注册EPOLLONESHOT事件,
      *   否则应用程序只能处理一个客户端连接
-     *   因为由于EPOLLONESHOT被设
-     *   置后续的客户端连接请求将不再触发listenfd的EPOLLIN
-     *
-     * */
+     *   因为由于EPOLLONESHOT被设置
+     *   后续的客户端连接请求将不再触发listenfd的EPOLLIN事件
+     */
     addfd( epollfd, listenfd, false );
 
     while( 1 )
@@ -174,14 +196,19 @@ int main( int argc, char* argv[] )
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof( client_address );
                 int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
+
+                /*  对每个非监听文件描述符都注册EPOLLONEHOT事件  */
                 addfd( epollfd, connfd, true );
             }
             else if ( events[i].events & EPOLLIN )
             {
-                pthread_t thread;
-                fds fds_for_new_worker;
+                pthread_t           thread;
+                fds_pthread_args    fds_for_new_worker;
+
                 fds_for_new_worker.epollfd = epollfd;
                 fds_for_new_worker.sockfd = sockfd;
+
+                /*  新启动一个工作县城为sockfd服务  */
                 pthread_create( &thread, NULL, worker, ( void* )&fds_for_new_worker );
             }
             else
