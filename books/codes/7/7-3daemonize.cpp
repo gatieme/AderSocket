@@ -1,3 +1,17 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+
+#include <unistd.h>
+
+
+int main(void)
+{
+    daemonize( );
+
+    return EXIT_SUCCESS;
+}
+
 bool daemonize()
 {
     pid_t pid = fork();
@@ -33,3 +47,4 @@ bool daemonize()
     open( "/dev/null", O_RDWR );
     return true;
 }
+
