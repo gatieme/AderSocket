@@ -1,0 +1,360 @@
+//  http://blog.csdn.net/sparkliang/article/details/4770655
+//
+// a simple echo server using epoll in linux
+//
+// 2009-11-05
+// 2013-03-22:修改了几个问题，1是/n格式问题，2是去掉了原代码不小心加上的ET模式;
+// 本来只是简单的示意程序，决定还是加上 recv/send时的buffer偏移
+// by sparkling
+//
+#include <sys/socket.h>
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <errno.h>
+
+
+#define MAX_EVENTS 500
+#define TCP_SERVER_PORT     6666
+
+
+
+typedef struct myevent_s
+{
+    int fd;
+    void (*call_back)(int fd, int events, void *arg);
+    int events;
+    void *arg;
+    int status;                     // 1: in epoll wait list, 0 not in
+    char buff[128];                 // recv data buffer
+    int len, s_offset;
+    long last_active;               // last active time
+}myevent_s;
+
+int g_epollFd;
+myevent_s g_Events[MAX_EVENTS + 1]; // g_Events[MAX_EVENTS] is used by listen fd
+
+
+// set event
+void EventSet(myevent_s *ev, int fd, void (*call_back)(int, int, void *), void *arg);
+
+// add/mod an event to epoll
+void EventAdd(int epollFd, int events, myevent_s *ev);
+
+// delete an event from epoll
+void EventDel(int epollFd, myevent_s *ev);
+
+
+void RecvData(int fd, int events, void *arg);
+void SendData(int fd, int events, void *arg);
+
+// accept new connections from clients
+void AcceptConn(int fd, int events, void *arg);
+
+void InitListenSocket(int epollFd, short port);
+
+
+int main(int argc, char **argv)
+{
+    unsigned short port = TCP_SERVER_PORT; // default port
+
+    if(argc == 2)
+    {
+        port = atoi(argv[1]);
+    }
+
+    // create epoll
+    g_epollFd = epoll_create(MAX_EVENTS);
+    if(g_epollFd <= 0)
+    {
+        perror("epoll_create : ");
+        printf("create epoll failed.%d\n", g_epollFd);
+    }
+    else
+    {
+        printf("create epoll success...\n");
+    }
+
+    // create & bind listen socket, and add to epoll, set non-blocking
+    InitListenSocket(g_epollFd, port);
+    printf("server running : port [ %d ]\n", port);
+
+    // event loop
+    struct epoll_event events[MAX_EVENTS];
+    int checkPos = 0;
+
+    while(1)
+    {
+        // 1--a simple timeout check here, every time 100 loop all the fs delete the timoue one
+        // 2--it is best to use a data structure to connect the FD connection time to save,
+        // and orderly, so do not have to poll all the FD, but according to the time to poll.
+        // 3--use a mini-heap, and add timer event as the libevent do
+        long now = time(NULL);
+
+        //  check for timeut
+        for(int i = 0; i < 100; i++, checkPos++)
+        {
+            // doesn't check listen fd, when listen fs recycle
+            if(checkPos == MAX_EVENTS)
+            {
+                checkPos = 0; // recycle
+            }
+
+            if(g_Events[checkPos].status != 1)
+            {
+                continue;
+            }
+
+            long duration = now - g_Events[checkPos].last_active;
+
+            if(duration >= 60) // 60s timeout
+            {
+                close(g_Events[checkPos].fd);
+
+                printf("[fd = %d] timeout[%d--%d].\n", g_Events[checkPos].fd, g_Events[checkPos].last_active, now);
+                EventDel(g_epollFd, &g_Events[checkPos]);
+            }
+        }
+
+        // wait for events to happen
+        int fds = epoll_wait(g_epollFd, events, MAX_EVENTS, 1000);
+        if(fds < 0)
+        {
+            perror("epoll_wait error ");
+            break;
+        }
+        // after epoll_wait, shoule loop all the event that will be happend
+        for(int i = 0; i < fds; i++)
+        {
+            myevent_s *ev = (struct myevent_s*)events[i].data.ptr;
+
+            if((events[i].events & EPOLLIN) && (ev->events & EPOLLIN)) // read event
+            {
+                ev->call_back(ev->fd, events[i].events, ev->arg);
+            }
+
+            if((events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT)) // write event
+            {
+                ev->call_back(ev->fd, events[i].events, ev->arg);
+            }
+        }
+    }
+
+    // free resource
+    return 0;
+}
+
+// set event
+void EventSet(myevent_s *ev, int fd, void (*call_back)(int, int, void *), void *arg)
+{
+    ev->fd = fd;
+    ev->call_back = call_back;
+    ev->events = 0;
+    ev->arg = arg;
+    ev->status = 0;
+    bzero(ev->buff, sizeof(ev->buff));
+    ev->s_offset = 0;
+    ev->len = 0;
+    ev->last_active = time(NULL);
+}
+
+/*
+ * we can use epoll_ctl to add, modify or delete an stream event
+ * epoll_ctl(epollfd, EPOLL_CTL_ADD, socket, EPOLLIN);//注册缓冲区非空事件，即有数据流入
+ * epoll_ctl(epollfd, EPOLL_CTL_DEL, socket, EPOLLOUT);//注册缓冲区非满事件，即流可以被写入
+ *
+ * */
+// add/mod an event to epoll
+void EventAdd(int epollFd, int events, myevent_s *ev)
+{
+    struct epoll_event epv = {0, {0}};
+    int op;
+
+    epv.data.ptr = ev;
+    epv.events = ev->events = events;
+
+    if(ev->status == 1)
+    {
+        op = EPOLL_CTL_MOD;
+    }
+    else
+    {
+        op = EPOLL_CTL_ADD;
+        ev->status = 1;
+    }
+
+    if(epoll_ctl(epollFd, op, ev->fd, &epv) < 0)
+    {
+        printf("Event Add failed[fd=%d], evnets[%d]\n", ev->fd, events);
+    }
+    else
+    {
+        printf("Event Add OK[fd=%d], op=%d, evnets[%0X]\n", ev->fd, op, events);
+    }
+}
+
+// delete an event from epoll
+void EventDel(int epollFd, myevent_s *ev)
+{
+    struct epoll_event epv = {0, {0}};
+    if(ev->status != 1) return;
+    epv.data.ptr = ev;
+    ev->status = 0;
+    epoll_ctl(epollFd, EPOLL_CTL_DEL, ev->fd, &epv);
+}
+
+
+// accept new connections from clients
+void AcceptConn(int fd, int events, void *arg)
+{
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(struct sockaddr_in);
+    int nfd, i;
+    // accept
+    if((nfd = accept(fd, (struct sockaddr*)&sin, &len)) == -1)
+    {
+        if(errno != EAGAIN && errno != EINTR)
+        {
+        }
+        printf("%s: accept, %d", __func__, errno);
+        return;
+    }
+    do
+    {
+        for(i = 0; i < MAX_EVENTS; i++)
+        {
+            if(g_Events[i].status == 0)
+            {
+                break;
+            }
+        }
+        if(i == MAX_EVENTS)
+        {
+            printf("%s:max connection limit[%d].", __func__, MAX_EVENTS);
+            break;
+        }
+        // set nonblocking
+        int iret = 0;
+        if((iret = fcntl(nfd, F_SETFL, O_NONBLOCK)) < 0)
+        {
+            printf("%s: fcntl nonblocking failed:%d", __func__, iret);
+            break;
+        }
+        // add a read event for receive data
+        EventSet(&g_Events[i], nfd, RecvData, &g_Events[i]);
+        EventAdd(g_epollFd, EPOLLIN, &g_Events[i]);
+    }while(0);
+    printf("new conn[%s:%d][time:%d], pos[%d]\n", inet_ntoa(sin.sin_addr),
+            ntohs(sin.sin_port), g_Events[i].last_active, i);
+}
+
+// receive data
+void RecvData(int fd, int events, void *arg)
+{
+    struct myevent_s *ev = (struct myevent_s*)arg;
+    int len;
+    // receive data
+    len = recv(fd, ev->buff+ev->len, sizeof(ev->buff)-1-ev->len, 0);
+    EventDel(g_epollFd, ev);
+    if(len > 0)
+    {
+        ev->len += len;
+        ev->buff[len] = '\0';
+        printf("C[%d]:%s\n", fd, ev->buff);
+        // change to send event
+        EventSet(ev, fd, SendData, ev);
+        EventAdd(g_epollFd, EPOLLOUT, ev);
+    }
+    else if(len == 0)
+    {
+        close(ev->fd);
+        printf("[fd=%d] pos[%d], closed gracefully.\n", fd, ev-g_Events);
+    }
+    else
+    {
+        close(ev->fd);
+        printf("recv[fd=%d] error[%d]:%s\n", fd, errno, strerror(errno));
+    }
+}
+
+
+// send data
+void SendData(int fd, int events, void *arg)
+{
+    struct myevent_s *ev = (struct myevent_s*)arg;
+    int len;
+    // send data
+    len = send(fd, ev->buff + ev->s_offset, ev->len - ev->s_offset, 0);
+    if(len > 0)
+    {
+        printf("send[fd=%d], [%d<->%d]%s\n", fd, len, ev->len, ev->buff);
+        ev->s_offset += len;
+        if(ev->s_offset == ev->len)
+        {
+            // change to receive event
+            EventDel(g_epollFd, ev);
+            EventSet(ev, fd, RecvData, ev);
+            EventAdd(g_epollFd, EPOLLIN, ev);
+        }
+    }
+    else
+    {
+        close(ev->fd);
+        EventDel(g_epollFd, ev);
+        printf("send[fd=%d] error[%d]\n", fd, errno);
+    }
+}
+
+
+void InitListenSocket(int epollFd, short port)
+{
+    int listenFd = socket(AF_INET, SOCK_STREAM, 0);
+
+    fcntl(listenFd, F_SETFL, O_NONBLOCK); // set non-blocking
+    printf("server listen fd=%d\n", listenFd);
+
+    EventSet(&g_Events[MAX_EVENTS], listenFd, AcceptConn, &g_Events[MAX_EVENTS]);
+
+    // add listen socket
+    EventAdd(epollFd, EPOLLIN, &g_Events[MAX_EVENTS]);
+
+    // bind & listen
+    struct sockaddr_in sin;
+    bzero(&sin, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = INADDR_ANY;
+    sin.sin_port = htons(port);
+
+    bind(listenFd, (const struct sockaddr*)&sin, sizeof(sin));
+
+    listen(listenFd, 5);
+}
+
+//  功能:设置socket为非阻塞的
+static int SetSocketNonBlock(int sfd)
+{
+    int flags, s;
+
+    //  得到文件状态标志
+    flags = fcntl (sfd, F_GETFL, 0);
+    if (flags == -1)
+    {
+      perror ("fcntl");
+      return -1;
+    }
+
+    //  设置文件状态标志
+    flags |= O_NONBLOCK;
+    s = fcntl (sfd, F_SETFL, flags);
+    if (s == -1)
+    {
+        perror ("fcntl");
+        return -1;
+    }
+
+    return 0;
+}
+
