@@ -2,22 +2,16 @@ ROOT=.
 PLATFORM=$(shell $(ROOT)/systype.sh)
 include $(ROOT)/Make.defines.$(PLATFORM)
 
-MAKE_DIR=make -C
+DIRS=simple fork pthread lcpthread select poll epoll
 
 
-SUBDIRS=simple fork pthread lcpthread select poll epoll
+all:
+	for i in $(DIRS); do \
+		(cd $$i && echo "making $$i" && $(MAKE)) || exit 1; \
+	done
 
-.PHONY:all $(SUBDIRS)
-
-all: $(SUBDIRS)
-
-$(SUBDIRS):
-	$(MAKE_DIR) $@
-
-
-.PHONY : clean
 clean:
-	for i in $(SUBDIRS); do \
+	for i in $(DIRS); do \
 		(cd $$i && echo "cleaning $$i" && $(MAKE) clean) || exit 1; \
 	done
 

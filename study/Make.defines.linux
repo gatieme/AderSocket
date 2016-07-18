@@ -24,6 +24,7 @@ AWK=awk
 LIBAPUE=
 
 
+COMMIT="修改根makefile的递归子目录为make -C方式, 并使用.PHONY加速make"
 GITHUB_COMMIT=$(COMMIT)
 
 # Common temp files to delete from each directory.
